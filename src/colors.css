@@ -1,0 +1,125 @@
+/*
+  Mood Atlas — Color System
+  Material 3-style role tokens, light + dark modes, system-driven via prefers-color-scheme.
+
+  Every color is stored as three space-separated RGB integers so Tailwind's
+  rgb(var(--token) / <alpha-value>) syntax works for opacity utilities
+  (bg-primary/50, text-tertiary/80, etc.).
+
+  Token families:
+    background   — page surface
+    surface      — content surfaces (cards, panels), with 3 elevation tiers
+    primary      — main brand action (ink blue)
+    secondary    — quieter brand action (graphite)
+    tertiary     — warm accent / third lane (vermillion)
+    error        — destructive / failure states
+    outline      — borders & dividers
+    inverse      — flipped surfaces for snackbars etc.
+
+  Pairing rule: every X has its on-X partner. Use them together.
+*/
+
+:root {
+  /* ─── Background ─────────────────────────────────────────────── */
+  --color-background: 244 240 232;
+  --color-on-background: 30 42 56;
+
+  /* ─── Surface (3 tiers) ──────────────────────────────────────── */
+  --color-surface: 250 246 238;
+  --color-on-surface: 30 42 56;
+  --color-on-surface-variant: 95 88 78;
+
+  --color-surface-container: 236 230 218;
+  --color-surface-container-high: 224 217 203;
+
+  /* ─── Primary (ink blue — main brand action) ─────────────────── */
+  --color-primary: 30 42 56;
+  --color-on-primary: 244 240 232;
+  --color-primary-container: 210 218 230;
+  --color-on-primary-container: 16 28 42;
+
+  /* ─── Secondary (graphite — quieter actions) ─────────────────── */
+  --color-secondary: 95 88 78;
+  --color-on-secondary: 244 240 232;
+  --color-secondary-container: 222 215 202;
+  --color-on-secondary-container: 54 48 38;
+
+  /* ─── Tertiary (vermillion — warm accent / third lane) ───────── */
+  /* Slightly deepened from the brand vermillion (209,79,47) so the
+     working color passes WCAG AA against on-tertiary. The logo SVG
+     keeps the brighter brand value. */
+  --color-tertiary: 188 64 36;
+  --color-on-tertiary: 252 250 245;
+  --color-tertiary-container: 250 220 208;
+  --color-on-tertiary-container: 124 40 18;
+
+  /* ─── Error (a deeper crimson, distinct from tertiary) ───────── */
+  --color-error: 164 38 32;
+  --color-on-error: 252 250 245;
+  --color-error-container: 250 215 212;
+  --color-on-error-container: 104 16 14;
+
+  /* ─── Outline ────────────────────────────────────────────────── */
+  --color-outline: 165 156 140;
+  --color-outline-variant: 215 207 192;
+
+  /* ─── Inverse (used for snackbars, tooltips, etc.) ───────────── */
+  --color-inverse-surface: 30 42 56;
+  --color-inverse-on-surface: 244 240 232;
+  --color-inverse-primary: 210 218 230;
+
+  /* ─── Scrim (modal backdrop — use with /60 or /70 opacity) ───── */
+  --color-scrim: 16 22 32;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* ─── Background ─────────────────────────────────────────────── */
+    --color-background: 22 28 36;
+    --color-on-background: 232 228 218;
+
+    /* ─── Surface (3 tiers — each lighter than the page) ─────────── */
+    --color-surface: 28 34 44;
+    --color-on-surface: 232 228 218;
+    --color-on-surface-variant: 158 153 144;
+
+    --color-surface-container: 40 48 60;
+    --color-surface-container-high: 54 64 78;
+
+    /* ─── Primary (flips: bone-on-ink instead of ink-on-paper) ───── */
+    --color-primary: 232 228 218;
+    --color-on-primary: 22 28 36;
+    --color-primary-container: 54 70 92;
+    --color-on-primary-container: 216 222 232;
+
+    /* ─── Secondary ──────────────────────────────────────────────── */
+    --color-secondary: 158 153 144;
+    --color-on-secondary: 22 28 36;
+    --color-secondary-container: 70 78 88;
+    --color-on-secondary-container: 216 211 200;
+
+    /* ─── Tertiary (slightly brightened for dark surfaces) ──────── */
+    --color-tertiary: 224 95 60;
+    --color-on-tertiary: 22 28 36;
+    --color-tertiary-container: 108 38 18;
+    --color-on-tertiary-container: 250 215 198;
+
+    /* ─── Error ──────────────────────────────────────────────────── */
+    --color-error: 236 122 110;
+    --color-on-error: 22 28 36;
+    --color-error-container: 124 24 22;
+    --color-on-error-container: 250 200 196;
+
+    /* ─── Outline ────────────────────────────────────────────────── */
+    --color-outline: 110 118 130;
+    --color-outline-variant: 58 68 82;
+
+    /* ─── Inverse ────────────────────────────────────────────────── */
+    --color-inverse-surface: 232 228 218;
+    --color-inverse-on-surface: 22 28 36;
+    --color-inverse-primary: 54 70 92;
+
+    /* ─── Scrim ──────────────────────────────────────────────────── */
+    --color-scrim: 0 0 0;
+  }
+}
