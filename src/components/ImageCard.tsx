@@ -6,8 +6,8 @@ type Props = {
 
 export function ImageCard({ image }: Props) {
   return (
-    <div className="break-inside-avoid mb-3 bg-surface-container border border-outline-variant rounded-md overflow-hidden">
-      <div style={{ aspectRatio: `${image.width} / ${image.height}` }}>
+    <div className="bg-surface-container border border-outline-variant rounded-md overflow-hidden">
+      <div className="aspect-[4/3]">
         <img
           src={image.url}
           alt={image.alt}
@@ -15,7 +15,7 @@ export function ImageCard({ image }: Props) {
           className="w-full h-full object-cover"
         />
       </div>
-      <div className="px-3 py-2 text-xs text-on-surface-variant">
+      <div className="p-2 text-xs text-on-surface-variant">
         Photo by{' '}
         <a
           href={image.authorUrl}
