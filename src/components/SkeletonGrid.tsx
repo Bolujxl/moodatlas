@@ -1,16 +1,28 @@
-import { STAGGER_OFFSETS } from '../lib/layout';
+import { STAGGER_OFFSETS_TOP, STAGGER_OFFSETS_BOTTOM } from '../lib/layout';
 
 export function SkeletonGrid() {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl mx-auto">
-      {STAGGER_OFFSETS.map((offset, i) => (
+    <div className="grid grid-cols-1 lg:grid-cols-6 gap-4 max-w-5xl mx-auto">
+      {STAGGER_OFFSETS_TOP.map((offset, i) => (
         <div
           key={i}
-          className="lg:mt-[var(--stagger)] md:mt-[var(--stagger-md)]"
-          style={{
-            '--stagger': `${offset}px`,
-            '--stagger-md': `${offset / 2}px`,
-          } as React.CSSProperties}
+          className="lg:col-span-2 lg:mt-[var(--stagger)]"
+          style={{ '--stagger': `${offset}px` } as React.CSSProperties}
+        >
+          <div className="bg-surface-container border border-outline-variant rounded-md overflow-hidden">
+            <div className="aspect-[4/3] bg-outline-variant animate-pulse" />
+          </div>
+        </div>
+      ))}
+
+      {STAGGER_OFFSETS_BOTTOM.map((offset, i) => (
+        <div
+          key={i + 3}
+          className={[
+            'lg:col-span-2 lg:mt-[var(--stagger)]',
+            i === 0 ? 'lg:col-start-2' : '',
+          ].join(' ')}
+          style={{ '--stagger': `${offset}px` } as React.CSSProperties}
         >
           <div className="bg-surface-container border border-outline-variant rounded-md overflow-hidden">
             <div className="aspect-[4/3] bg-outline-variant animate-pulse" />

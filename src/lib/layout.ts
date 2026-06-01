@@ -1,1 +1,2 @@
-export const STAGGER_OFFSETS = [0, 24, 8, 0, 24];
+export const STAGGER_OFFSETS_TOP = [0, 24, 8];
+export const STAGGER_OFFSETS_BOTTOM = [0, 24];
