@@ -10,7 +10,7 @@ export function SkeletonGrid() {
           style={{ '--stagger': `${offset}px` } as React.CSSProperties}
         >
           <div className="bg-surface-container border border-outline-variant rounded-md overflow-hidden">
-            <div className="aspect-[4/3] bg-outline-variant animate-pulse" />
+            <div className="aspect-[4/3] bg-outline-variant animate-pulse motion-reduce:animate-none" />
           </div>
         </div>
       ))}
@@ -25,7 +25,7 @@ export function SkeletonGrid() {
           style={{ '--stagger': `${offset}px` } as React.CSSProperties}
         >
           <div className="bg-surface-container border border-outline-variant rounded-md overflow-hidden">
-            <div className="aspect-[4/3] bg-outline-variant animate-pulse" />
+            <div className="aspect-[4/3] bg-outline-variant animate-pulse motion-reduce:animate-none" />
           </div>
         </div>
       ))}

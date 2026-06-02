@@ -21,6 +21,9 @@ export async function fetchMoodImages(
   });
 
   if (!response.ok) {
+    if (response.status === 429 || response.status === 403) {
+      throw new Error('Rate limit reached — please wait an hour and try again.');
+    }
     throw new Error(`Unsplash returned ${response.status}`);
   }
 
@@ -28,7 +31,7 @@ export async function fetchMoodImages(
   return data.results.map((r: any) => ({
     id: r.id,
     url: r.urls.regular,
-    alt: r.alt_description ?? '',
+    alt: r.alt_description || r.description || `${mood} mood image`,
     authorName: r.user.name,
     authorUrl: `${r.user.links.html}?utm_source=mood_atlas&utm_medium=referral`,
     width: r.width,

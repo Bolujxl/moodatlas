@@ -30,15 +30,23 @@ function App() {
 
       <main className="px-6 py-8 max-w-5xl mx-auto">
         <MoodRow selected={currentMood} onSelect={selectMood} />
-        <div className="mt-8">
+        <div className="mt-8" aria-live="polite" aria-atomic="true">
           {state.status === 'idle' && (
             <p className="text-center text-on-surface-variant py-16">
               Pick a mood to begin.
             </p>
           )}
-          {state.status === 'loading' && <SkeletonGrid />}
+          {state.status === 'loading' && (
+            <>
+              <span className="sr-only">Loading images…</span>
+              <SkeletonGrid />
+            </>
+          )}
           {state.status === 'success' && (
-            <ImageGrid images={state.images} />
+            <>
+              <span className="sr-only">Five images loaded.</span>
+              <ImageGrid images={state.images} />
+            </>
           )}
           {state.status === 'error' && (
             <ErrorState message={state.message} onRetry={retry} />

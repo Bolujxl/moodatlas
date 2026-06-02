@@ -7,6 +7,14 @@ type Props = {
 };
 
 export function ImageGrid({ images }: Props) {
+  if (images.length < 5) {
+    return (
+      <p className="text-center text-on-surface-variant py-16">
+        Not enough images found for this mood. Try another.
+      </p>
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-6 gap-4 max-w-5xl mx-auto">
       <div

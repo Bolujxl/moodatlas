@@ -25,26 +25,37 @@ export function useMoodFetch() {
     const controller = new AbortController();
     abortRef.current = controller;
 
+    const timedOut = { current: false };
+    const timeoutId = setTimeout(() => {
+      timedOut.current = true;
+      controller.abort();
+    }, 10_000);
+
     setState({ status: 'loading' });
 
     fetchMoodImages(mood, controller.signal)
       .then((images) => {
+        clearTimeout(timeoutId);
         if (controller.signal.aborted) return;
         cacheRef.current[mood] = images;
         setState({ status: 'success', images });
       })
       .catch((err) => {
-        if (controller.signal.aborted) return;
-        setState({ status: 'error', message: err.message });
+        clearTimeout(timeoutId);
+        if (controller.signal.aborted && !timedOut.current) return;
+        setState({
+          status: 'error',
+          message: timedOut.current
+            ? 'Request timed out — please try again.'
+            : err.message,
+        });
       });
   }, [currentMood, state.status]);
 
   const retry = useCallback(() => {
     if (currentMood) {
-      const moodToRetry = currentMood;
-      delete cacheRef.current[moodToRetry];
-      setCurrentMood(null);
-      selectMood(moodToRetry);
+      delete cacheRef.current[currentMood];
+      selectMood(currentMood);
     }
   }, [currentMood, selectMood]);
 

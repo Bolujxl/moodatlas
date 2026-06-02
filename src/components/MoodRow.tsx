@@ -10,7 +10,7 @@ type Props = {
 
 export function MoodRow({ selected, onSelect }: Props) {
   return (
-    <div className="flex flex-wrap justify-center gap-2">
+    <div role="group" aria-label="Mood selection" className="flex flex-wrap justify-center gap-2">
       {MOODS.map((mood) => (
         <MoodButton
           key={mood}
