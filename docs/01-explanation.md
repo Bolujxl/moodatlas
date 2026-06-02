@@ -106,24 +106,20 @@ The function is a lookup table. No logic, no conditionals — just five rows of 
 ## `src/lib/layout.ts` — The Stagger Rhythm
 
 ```ts
-export const STAGGER_OFFSETS = [0, 24, 8, 0, 24];
+export const STAGGER_OFFSETS_TOP = [0, 24, 8];
+export const STAGGER_OFFSETS_BOTTOM = [0, 24];
 ```
 
-**What this file's job is:** Hold the five numbers that give our grid its musical offset pattern.
+**What this file's job is:** Hold the numbers that give our grid its musical offset pattern, split into a top row and a bottom row so each row can rest at its own baseline.
 
-A one-line file. Five numbers in an array. Each number is how many pixels to shift a card *downward* from the grid's normal row position:
+Two arrays now, not one. When the grid was refactored to center the bottom row, the single array `[0, 24, 8, 0, 24]` was split in two:
 
-| Card | Offset | Visual effect |
-|------|--------|---------------|
-| 1st  | 0px    | sits at the baseline |
-| 2nd  | 24px   | drops down noticeably |
-| 3rd  | 8px    | drops just a touch |
-| 4th  | 0px    | baseline again (row 2) |
-| 5th  | 24px   | drops down, matching card 2's rhythm |
+- `STAGGER_OFFSETS_TOP` covers the three cards in the top row: card 1 at baseline (0px), card 2 dropped 24px, card 3 nudged 8px.
+- `STAGGER_OFFSETS_BOTTOM` covers the two cards in the centered bottom row: card 4 at baseline (0px), card 5 dropped 24px.
 
-The pattern is `[0, 24, 8, 0, 24]`. It reads like a heartbeat: baseline, down, half-down, baseline, down. The 8px offset on card 3 is the grace note — it breaks the repetition so the grid doesn't feel mechanical.
+The bottom row's offsets restart at 0. The eye reads the bottom row as a fresh visual line, not a continuation of the top row's rhythm. Continuing the offset from where card 3 left off (+8) would make the bottom row feel forced.
 
-This lives in its own file because both `ImageGrid` and `SkeletonGrid` need the same numbers. If the stagger pattern changes, you change one number in one place, and both components stay in sync. A real-world dev calls this DRY — Don't Repeat Yourself.
+Two lines, two arrays, imported by both `ImageGrid` and `SkeletonGrid`. Change one number here and both grids follow — same single source of truth principle as before, just split into top and bottom.
 
 ---
 
@@ -195,13 +191,18 @@ The second argument to `fetch` is an **options object** with two important thing
 
 ```ts
   if (!response.ok) {
+    if (response.status === 429 || response.status === 403) {
+      throw new Error('Rate limit reached — please wait an hour and try again.');
+    }
     throw new Error(`Unsplash returned ${response.status}`);
   }
 ```
 
 This line surprises a lot of beginners. `fetch` is *weird* about errors. If the server sends back a 404 (not found) or 500 (server broke), `fetch` doesn't throw an error — the promise resolves normally. You have to check `response.ok` yourself.
 
-`response.ok` is a boolean that's `true` for status codes 200-299 and `false` for everything else (400s, 500s). Without this check, your code would blithely call `response.json()` on a 404 page, get a weird error about parsing HTML as JSON, and you'd stare at a confusing stack trace. This is a footgun in native `fetch` that libraries like Axios handle for you. Since we're using raw `fetch`, we handle it ourselves.
+`response.ok` is a boolean that's `true` for status codes 200-299 and `false` for everything else.
+
+The app now handles rate limits specially. Unsplash's Demo tier allows 50 requests per hour. When that cap is hit, the API returns HTTP 429 (or sometimes 403). Without the extra check, the user would see a cryptic "Unsplash returned 429" with no idea what it means or what to do. The app now recognizes those status codes and throws a human-readable message: "Rate limit reached — please wait an hour and try again." The user sees that on screen and knows exactly what happened.
 
 ```ts
   const data = await response.json();
@@ -215,7 +216,7 @@ This is also `await`-ed because parsing a large JSON body takes a moment. Withou
   return data.results.map((r: any) => ({
     id: r.id,
     url: r.urls.regular,
-    alt: r.alt_description ?? '',
+    alt: r.alt_description || r.description || `${mood} mood image`,
     authorName: r.user.name,
     authorUrl: `${r.user.links.html}?utm_source=mood_atlas&utm_medium=referral`,
     width: r.width,
@@ -229,7 +230,7 @@ The final step: reshaping. Unsplash's response is a big object with layers of ne
 
 `(r: any)` — the Unsplash response object is `any` because we haven't written a full type for it. We could, but for a single endpoint in a small app, it's wasted effort. The `.map()` produces typed `ImageResult` objects, so from here on, everything is type-safe.
 
-`r.alt_description ?? ''` uses the **nullish coalescing operator** (`??`). It says "use `r.alt_description` if it's not null or undefined; otherwise, use an empty string." Unsplash sometimes returns `null` for alt descriptions, and our type says `alt` must be a string. `?? ''` bridges that gap.
+The `alt` field uses a three-stage fallback chain: `r.alt_description || r.description || \`${mood} mood image\``. Unsplash's `alt_description` is an AI-generated short description — it's usually populated but sometimes null. The `description` field is a longer, user-written caption — sometimes present when `alt_description` isn't. If both are empty, the fallback generates a contextual label like "calm mood image." This ensures every image has non-empty alt text for screen readers. Using `||` (logical OR) instead of `??` (nullish coalescing) means an empty string `""` also triggers the fallback — better to say "calm mood image" than nothing at all.
 
 The `authorUrl` has UTM parameters appended: `?utm_source=mood_atlas&utm_medium=referral`. Unsplash's API terms *require* this for attribution. It tells Unsplash that the traffic came from our app, so they can track usage. It doesn't change the link destination — it still goes to the photographer's profile — but it adds invisible tracking tags.
 
@@ -321,29 +322,50 @@ This is like calling a friend to ask them to look something up, then calling aga
     setState({ status: 'loading' });
 ```
 
-Update the screen to show skeletons. This is the moment the shimmering ghost cards appear.
+Updating the screen to show skeletons. This is the moment the pulsing ghost cards appear.
+
+But before firing the fetch, the hook sets a safety timer:
+
+```ts
+    const timedOut = { current: false };
+    const timeoutId = setTimeout(() => {
+      timedOut.current = true;
+      controller.abort();
+    }, 10_000);
+```
+
+A ten-second timeout. If the fetch hasn't completed in ten seconds, the abort controller fires — cancelling the request. The `timedOut` flag tracks *why* the abort happened, so the catch handler can tell the difference between "user changed moods" (silent abort) and "request took too long" (show an error).
+
+The `timedOut` variable is a plain object (`{ current: false }`), not a `useRef`. It doesn't need to survive between renders — it only needs to be accessible inside the `.then` and `.catch` closures below. Creating it fresh inside `selectMood` is simpler and avoids another ref.
 
 ```ts
     fetchMoodImages(mood, controller.signal)
       .then((images) => {
+        clearTimeout(timeoutId);
         if (controller.signal.aborted) return;
         cacheRef.current[mood] = images;
         setState({ status: 'success', images });
       })
       .catch((err) => {
-        if (controller.signal.aborted) return;
-        setState({ status: 'error', message: err.message });
+        clearTimeout(timeoutId);
+        if (controller.signal.aborted && !timedOut.current) return;
+        setState({
+          status: 'error',
+          message: timedOut.current
+            ? 'Request timed out — please try again.'
+            : err.message,
+        });
       });
   }, [currentMood, state.status]);
 ```
 
 The actual fetch call. `fetchMoodImages` returns a Promise. We attach two handlers:
 
-**`.then()`** — this runs if the fetch succeeded. First thing it does: check `controller.signal.aborted`. Why? Because between the time the fetch completed and this `.then` ran, the user might have clicked another mood, which would have called `abortRef.current?.abort()`, setting this signal to aborted. If so, we bail out silently — the stale result never paints.
+**`.then()`** — this runs if the fetch succeeded. First thing: `clearTimeout(timeoutId)` — the fetch finished before the 10-second timer fired, so we cancel the scheduled abort. Next: check `controller.signal.aborted`. If the signal was aborted (user changed moods), bail out silently. If not: store the images in the cache and update the screen.
 
-If not aborted: store the images in the cache for next time, and update the screen to show them.
+**`.catch()`** — this runs if the fetch failed. First thing: `clearTimeout(timeoutId)` — same as above, clean up the timer. Next: the decision. `if (controller.signal.aborted && !timedOut.current) return;` — if the signal was aborted AND it wasn't because of a timeout, bail out. That's the "user changed moods" case. If the signal was aborted BECAUSE of a timeout (`timedOut.current` is true), we don't return — we set the error state with a "timed out" message. If the error is real (network down, Unsplash 500, rate limit), we set the error state with the actual error message.
 
-**`.catch()`** — this runs if the fetch failed. First thing it does: check `controller.signal.aborted`. If the error is because we *ourselves* aborted it (which `fetch` reports as an `AbortError`), we do nothing. That's not a real error — it's us telling ourselves to stop. Only if the error came from somewhere else (network down, Unsplash 500, missing API key) do we set the error state and show it on screen.
+This three-way split — timeout, mood-change abort, real error — gives the user appropriate feedback for each failure mode. The skeleton doesn't spin forever. The user isn't shown a confusing "AbortError" when the network is just slow. And stale moods never overwrite the current one.
 
 After the closing brace of `selectMood`, we see `}, [currentMood, state.status])`. This is the **dependency array** of `useCallback`. It tells React: "recreate this function only when these two values change."
 
@@ -354,23 +376,17 @@ What if `state.status` weren't in the array? The retry escape hatch (`state.stat
 ```ts
   const retry = useCallback(() => {
     if (currentMood) {
-      const moodToRetry = currentMood;
-      delete cacheRef.current[moodToRetry];
-      setCurrentMood(null);
-      selectMood(moodToRetry);
+      delete cacheRef.current[currentMood];
+      selectMood(currentMood);
     }
   }, [currentMood, selectMood]);
 ```
 
-The retry function. Simpler than it looks, but there's a subtle trick.
+The retry function. Simpler than before — two steps: delete the cache entry for the current mood (forcing a fresh fetch), then call `selectMood` with that same mood.
 
 `if (currentMood)` — guard against retrying when nothing is selected (there will always be something selected if the error is showing, but the guard is correct practice).
 
-`delete cacheRef.current[moodToRetry]` — remove the cached entry for this mood. The cache only stores successes, not failures, so this is mostly about ensuring a clean state.
-
-The trick is `setCurrentMood(null)` followed by `selectMood(moodToRetry)`. Why not just call `selectMood(moodToRetry)` directly? Because `selectMood` has that spam guard at the top: `if (mood === currentMood && state.status !== 'error') return;`.
-
-When retry runs, `state.status` is `'error'`, so the guard's second condition fails and we'd pass through — right? Almost. But `selectMood` is wrapped in `useCallback` and captures `state.status` from *its* closure. The `retry` function also captures `selectMood` from its closure. These can slightly desync across rapid clicks. The `setCurrentMood(null)` ensures that even if the closure captures a stale comparison, `moodToRetry !== null` and the guard won't block. It's a small defensive measure.
+Why no `setCurrentMood(null)` anymore? The spam guard at the top of `selectMood` has the `state.status !== 'error'` escape hatch. When retry runs, the state is `'error'`, so the guard's second condition fails and `selectMood` passes through on its own. The null trick was an earlier defensive measure that turned out to be unnecessary — the guard already handles it. Removing it made `retry` two lines shorter and easier to reason about.
 
 ```ts
   return { currentMood, state, selectMood, retry };
@@ -459,7 +475,7 @@ The row only needs two props:
 ```ts
 export function MoodRow({ selected, onSelect }: Props) {
   return (
-    <div className="flex flex-wrap justify-center gap-2">
+    <div role="group" aria-label="Mood selection" className="flex flex-wrap justify-center gap-2">
       {MOODS.map((mood) => (
         <MoodButton
           key={mood}
@@ -479,6 +495,8 @@ A single `<div>` with `flex flex-wrap justify-center gap-2`. Let's unpack those 
 - `flex-wrap` allows buttons to wrap to the next line if the screen is too narrow (good for very small phones).
 - `justify-center` centers the row horizontally.
 - `gap-2` puts 8px of space between every button.
+
+The `role="group"` and `aria-label` tell screen readers that these five buttons form a single control group labelled 'Mood selection.' A screen reader user hears 'Mood selection, group' when they land on it, instead of having to discover the buttons one by one with no context.
 
 Inside, the `.map()` visits every mood in the `MOODS` array and returns a `<MoodButton>`. `key={mood}` tells React "calm is calm, loud is loud" — React uses keys to track which button is which across re-renders. Since moods are unique strings, they make perfect keys.
 
@@ -509,6 +527,7 @@ export function ImageCard({ image }: Props) {
           src={image.url}
           alt={image.alt}
           loading="lazy"
+          decoding="async"
           className="w-full h-full object-cover"
         />
       </div>
@@ -519,6 +538,8 @@ The outer `<div>` sets up the card's visual box: a background colour from our to
 Inside, a container `<div>` with `aspect-[4/3]` that forces the image area to always be 4 units wide for every 3 units tall. This is one of Tailwind's arbitrary value features — the `[]` syntax lets you write any CSS value inline. Every card gets the same shape, regardless of what Unsplash sends. A wide landscape image will crop from the sides; a tall portrait will crop from the top and bottom. `object-cover` on the image handles this cropping — it fills the box and trims what doesn't fit.
 
 `loading="lazy"` tells the browser: "don't load this image until it's close to being visible." Since all five cards are in a grid and visible from the start, this doesn't save much here, but it's a good habit for any image component.
+
+`decoding="async"` tells the browser to decode (decompress) the image off the main thread. This prevents image decoding from janking the page layout during render. A small polish — the difference is imperceptible for five images, but it's the correct default for any `<img>` tag.
 
 ```ts
       <div className="p-2 text-xs text-on-surface-variant">
@@ -547,17 +568,17 @@ The `<a>` tag links to the photographer's Unsplash profile. `target="_blank"` op
 
 ---
 
-## `src/components/ImageGrid.tsx` — Five Cards in a Staggered Grid
+## `src/components/ImageGrid.tsx` — Five Cards in a Centered Staggered Grid
 
 ```ts
 import type { ImageResult } from '../types';
 import { ImageCard } from './ImageCard';
-import { STAGGER_OFFSETS } from '../lib/layout';
+import { STAGGER_OFFSETS_TOP, STAGGER_OFFSETS_BOTTOM } from '../lib/layout';
 ```
 
-**What this file's job is:** Arrange five image cards in a 3-column grid where cards are nudged vertically to create an offset rhythm.
+**What this file's job is:** Arrange five image cards in a 6-column grid where the top row fills the full width and the bottom two cards are centered with equal empty space on either side. Each card is nudged vertically using the stagger offsets.
 
-The third import — `STAGGER_OFFSETS` — is that five-number array we stored in `lib/layout.ts`. Both `ImageGrid` and `SkeletonGrid` import from the same source.
+The third import — `STAGGER_OFFSETS_TOP` and `STAGGER_OFFSETS_BOTTOM` — are those two arrays from `lib/layout.ts`. Both `ImageGrid` and `SkeletonGrid` import from the same source.
 
 ```ts
 type Props = {
@@ -565,86 +586,135 @@ type Props = {
 };
 
 export function ImageGrid({ images }: Props) {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl mx-auto">
+  if (images.length < 5) {
+    return (
+      <p className="text-center text-on-surface-variant py-16">
+        Not enough images found for this mood. Try another.
+      </p>
+    );
+  }
 ```
 
-The container is a CSS Grid. The column count changes with screen width:
-- `grid-cols-1` — on the smallest screens: one column. Cards stack vertically.
-- `md:grid-cols-2` — at the `md` breakpoint (768px+): two columns.
-- `lg:grid-cols-3` — at the `lg` breakpoint (1024px+): three columns.
-
-`gap-4` puts 16px of space between every cell (horizontally and vertically). `max-w-5xl mx-auto` caps the grid width and centers it.
+Before rendering the grid, the component checks if enough images were returned. If Unsplash returns fewer than 5 results (edge case, but possible), the grid would have empty slots. Instead of showing a broken layout, the component shows a friendly message and exits early. No blank screen, no silent failure.
 
 ```ts
-      {images.map((image, i) => (
-        <div
-          key={image.id}
-          className="lg:mt-[var(--stagger)] md:mt-[var(--stagger-md)]"
-          style={{
-            '--stagger': `${STAGGER_OFFSETS[i] ?? 0}px`,
-            '--stagger-md': `${(STAGGER_OFFSETS[i] ?? 0) / 2}px`,
-          } as React.CSSProperties}
-        >
-          <ImageCard image={image} />
-        </div>
-      ))}
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-6 gap-4 max-w-5xl mx-auto">
+```
+
+The container is a 6-column CSS Grid that becomes a single column on mobile:
+- `grid-cols-1` — on the smallest screens: one column. Cards stack vertically.
+- `lg:grid-cols-6` — at the `lg` breakpoint (1024px+): six equal columns.
+
+There is no `md` intermediate breakpoint. The grid jumps straight from single column to full 6-column at `lg`. The bottom-row centering trick only works in the 6-column structure, and an intermediate 2-column layout would need its own positioning logic — the complexity isn't worth it for a viewport range most users never sit in.
+
+```ts
+      <div
+        className="lg:col-span-2 lg:mt-[var(--stagger)]"
+        style={{ '--stagger': `${STAGGER_OFFSETS_TOP[0]}px` } as React.CSSProperties}
+      >
+        <ImageCard image={images[0]} />
+      </div>
+      <div
+        className="lg:col-span-2 lg:mt-[var(--stagger)]"
+        style={{ '--stagger': `${STAGGER_OFFSETS_TOP[1]}px` } as React.CSSProperties}
+      >
+        <ImageCard image={images[1]} />
+      </div>
+      <div
+        className="lg:col-span-2 lg:mt-[var(--stagger)]"
+        style={{ '--stagger': `${STAGGER_OFFSETS_TOP[2]}px` } as React.CSSProperties}
+      >
+        <ImageCard image={images[2]} />
+      </div>
+```
+
+The top row — three cards, each spanning 2 of the 6 columns. Cards 1, 2, and 3 fill columns 1-2, 3-4, and 5-6 respectively. Each gets its stagger offset from `STAGGER_OFFSETS_TOP`: 0px, 24px, and 8px.
+
+Unlike the earlier version, these cards are NOT rendered with `.map()`. Each card is explicitly written out with its own `<div>`. This is because the bottom row uses `col-start-2` placement on card 4, and a generic `.map()` can't customize individual card positions. Explicit rendering gives each card the flexibility it needs.
+
+The stagger offset works via CSS custom properties, same as before: the offset number becomes a `--stagger` CSS variable, which Tailwind's `lg:mt-[var(--stagger)]` reads as `margin-top`. Only at `lg:` and above — below that, the offset is zero.
+
+```ts
+      <div
+        className="lg:col-span-2 lg:col-start-2 lg:mt-[var(--stagger)]"
+        style={{ '--stagger': `${STAGGER_OFFSETS_BOTTOM[0]}px` } as React.CSSProperties}
+      >
+        <ImageCard image={images[3]} />
+      </div>
+      <div
+        className="lg:col-span-2 lg:mt-[var(--stagger)]"
+        style={{ '--stagger': `${STAGGER_OFFSETS_BOTTOM[1]}px` } as React.CSSProperties}
+      >
+        <ImageCard image={images[4]} />
+      </div>
     </div>
   );
 }
 ```
 
-Each card gets a wrapper `<div>` with a stagger offset. How it works:
+The bottom row — two cards, centered. Card 4 uses `lg:col-start-2` to skip column 1 and start at column 2, spanning columns 2-3. Card 5 follows naturally into columns 4-5. Column 1 and column 6 are left empty — equal empty space on either side, true centering.
 
-1. `STAGGER_OFFSETS[i]` looks up the pixel offset for this card's position. `?? 0` is a safety fallback — if the array is somehow shorter than expected, default to 0.
-
-2. The offset is passed as a **CSS custom property** (`--stagger`) via the inline `style` attribute. The value becomes `24px`, `8px`, or `0px` depending on the card index.
-
-3. Tailwind's arbitrary value syntax `mt-[var(--stagger)]` reads that CSS variable and applies it as `margin-top`. Only the `mt-[var(--stagger)]` class applies the offset. In plain CSS, it becomes `margin-top: var(--stagger);`.
-
-4. `lg:mt-[var(--stagger)]` means: only apply this at the `lg` breakpoint (1024px+). Below that, on mobile or tablet, the offset is zero — no stagger on a single-column layout.
-
-5. `md:mt-[var(--stagger-md)]` applies a half-offset at the `md` breakpoint (768-1023px). The full 24px offset is calibrated for 3 columns; at 2 columns, halving them keeps the rhythm without overdoing it.
-
-The `as React.CSSProperties` type assertion tells TypeScript "trust me, these CSS custom property names are valid for inline styles." React's `style` type doesn't natively know about custom properties (they're keys starting with `--`), so we override the type check.
-
-Inside each wrapper sits an `<ImageCard>`. The card doesn't know about the stagger — it just renders an image and attribution. The wrapper handles the vertical nudge. This separation is clean: the grid is responsible for positioning, the card is responsible for content.
+The offsets come from `STAGGER_OFFSETS_BOTTOM`: card 4 at 0px (baseline), card 5 at 24px (dropped). Restarting at 0 gives the bottom row its own rhythm instead of continuing the top row's pattern.
 
 ---
 
 ## `src/components/SkeletonGrid.tsx` — Ghost Cards While Loading
 
 ```ts
-import { STAGGER_OFFSETS } from '../lib/layout';
+import { STAGGER_OFFSETS_TOP, STAGGER_OFFSETS_BOTTOM } from '../lib/layout';
 ```
 
-**What this file's job is:** Show five pulsing ghost cards in the exact same staggered positions as the real image grid, so the screen doesn't jump when the real images arrive.
+**What this file's job is:** Show five pulsing ghost cards in the exact same positions as the real image grid — same 6-column structure, same centered bottom row, same stagger offsets — so the screen doesn't jump when the real images arrive.
 
 ```ts
 export function SkeletonGrid() {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl mx-auto">
+    <div className="grid grid-cols-1 lg:grid-cols-6 gap-4 max-w-5xl mx-auto">
 ```
 
-Same grid container as `ImageGrid`. Same breakpoint rules, same gap, same max-width. If these two containers ever got different classes, the layout would jump when images loaded — the skeleton would end, the real grid would start, and everything would shift. Keeping them identical prevents that.
+Same container as `ImageGrid`. `grid-cols-1 lg:grid-cols-6`. If these two containers ever got different classes, the layout would jump when images loaded.
 
 ```ts
-      {STAGGER_OFFSETS.map((offset, i) => (
+      {STAGGER_OFFSETS_TOP.map((offset, i) => (
         <div
           key={i}
-          className="lg:mt-[var(--stagger)] md:mt-[var(--stagger-md)]"
-          style={{
-            '--stagger': `${offset}px`,
-            '--stagger-md': `${offset / 2}px`,
-          } as React.CSSProperties}
+          className="lg:col-span-2 lg:mt-[var(--stagger)]"
+          style={{ '--stagger': `${offset}px` } as React.CSSProperties}
         >
 ```
 
-The stagger offsets are applied the exact same way as in `ImageGrid`. The same array, the same CSS custom property pattern, the same responsive breakpoints. This is why `STAGGER_OFFSETS` is in a shared file — changing one number updates both grids identically.
+The top three skeletons, mapped from `STAGGER_OFFSETS_TOP`. Each spans 2 columns and gets its stagger offset — same pattern as the image grid's top row. The `.map()` works here because all three top-row skeletons share identical layout rules (just different offsets). The image grid uses explicit cards instead of `.map()` because card 4 needs `col-start-2` — but the skeleton grid uses a conditional in its `.map()` instead.
 
 ```ts
           <div className="bg-surface-container border border-outline-variant rounded-md overflow-hidden">
-            <div className="aspect-[4/3] bg-outline-variant animate-pulse" />
+            <div className="aspect-[4/3] bg-outline-variant animate-pulse motion-reduce:animate-none" />
+          </div>
+        </div>
+      ))}
+```
+
+Each skeleton is a rectangle with `aspect-[4/3]` matching the real card's shape. `bg-outline-variant` gives it the muted neutral from our token system. `animate-pulse` is Tailwind's built-in pulse: a smooth opacity oscillation that signals "something is coming."
+
+The new addition: `motion-reduce:animate-none`. This disables the pulse animation when the user has `prefers-reduced-motion` enabled in their OS. Some users experience dizziness or nausea from persistent animations — the skeleton becomes a static loading bar for them. The visual feedback is still there (a coloured rectangle where an image will be), just without the motion.
+
+```ts
+      {STAGGER_OFFSETS_BOTTOM.map((offset, i) => (
+        <div
+          key={i + 3}
+          className={[
+            'lg:col-span-2 lg:mt-[var(--stagger)]',
+            i === 0 ? 'lg:col-start-2' : '',
+          ].join(' ')}
+          style={{ '--stagger': `${offset}px` } as React.CSSProperties}
+        >
+```
+
+The bottom two skeletons, mapped from `STAGGER_OFFSETS_BOTTOM`. The first one (`i === 0`) gets `lg:col-start-2` — the same centering trick as the image grid. The second follows naturally. `key={i + 3}` keeps the keys unique across both maps (0, 1, 2 from top, then 3, 4 from bottom — React needs unique keys across siblings).
+
+```ts
+          <div className="bg-surface-container border border-outline-variant rounded-md overflow-hidden">
+            <div className="aspect-[4/3] bg-outline-variant animate-pulse motion-reduce:animate-none" />
           </div>
         </div>
       ))}
@@ -653,13 +723,7 @@ The stagger offsets are applied the exact same way as in `ImageGrid`. The same a
 }
 ```
 
-Each skeleton is a single `<div>` with `aspect-[4/3]` — matching the real card's shape. The skeleton has no image, no author name, no link. Just a rectangle.
-
-`bg-outline-variant` gives it a subtle colour — a muted neutral from our token system. `animate-pulse` is Tailwind's built-in pulse animation: a smooth opacity oscillation from 100% to 50% and back, looped. It's the visual signal that says "something is coming, wait a moment."
-
-The outer `<div>` (with `bg-surface-container border border-outline-variant rounded-md overflow-hidden`) matches the card wrapper in `ImageCard`. Same visual framing, just empty inside.
-
-When the fetch succeeds and `state` switches from `loading` to `success`, React unmounts every skeleton and mounts every real image card in the same positions. The pulse stops; the images appear. No layout shift, no jump, no flash. The skeleton and the final grid occupy identical space.
+Same skeleton shape, same `motion-reduce:animate-none`. When the fetch succeeds and state switches from `loading` to `success`, React unmounts every skeleton and mounts every real image card in the same positions. The layout never shifts — the skeleton occupied the exact space the images will fill.
 
 ---
 
@@ -822,20 +886,24 @@ Title and subtitle in a `<div>` stacked vertically. The title is large (`text-3x
 ```ts
       <main className="px-6 py-8 max-w-5xl mx-auto">
         <MoodRow selected={currentMood} onSelect={selectMood} />
-```
 
-The main content area. First child: the row of mood buttons. `currentMood` and `selectMood` come from the hook. The row doesn't need `retry` — it only selects moods. It doesn't need `state` — it only highlights the active button.
-
-```ts
-        <div className="mt-8">
+        <div className="mt-8" aria-live="polite" aria-atomic="true">
           {state.status === 'idle' && (
             <p className="text-center text-on-surface-variant py-16">
               Pick a mood to begin.
             </p>
           )}
-          {state.status === 'loading' && <SkeletonGrid />}
+          {state.status === 'loading' && (
+            <>
+              <span className="sr-only">Loading images…</span>
+              <SkeletonGrid />
+            </>
+          )}
           {state.status === 'success' && (
-            <ImageGrid images={state.images} />
+            <>
+              <span className="sr-only">Five images loaded.</span>
+              <ImageGrid images={state.images} />
+            </>
           )}
           {state.status === 'error' && (
             <ErrorState message={state.message} onRetry={retry} />
@@ -849,16 +917,11 @@ The main content area. First child: the row of mood buttons. `currentMood` and `
 export default App;
 ```
 
-The render switch — four branches, one per state. This is the discriminated union paying off:
+The grid container now has `aria-live="polite"` and `aria-atomic="true"`. `aria-live="polite"` tells screen readers to announce changes to this region after the current task finishes — not interrupting whatever the user is doing. `aria-atomic="true"` tells them to read the entire region's content, not just the changed part.
 
-- **idle** — the user hasn't clicked anything. Show a hint: "Pick a mood to begin."
-- **loading** — a fetch is in progress. Show the skeleton grid. Note that `SkeletonGrid` takes no props — it doesn't know what mood is loading. It just renders five ghost cards in the correct positions.
-- **success** — the fetch completed. Show the image grid with the returned images. TypeScript knows `state.images` exists here because we checked `state.status === 'success'`. Try to read `state.images` in any other branch, and the compiler says no.
-- **error** — the fetch failed. Show the error message and retry button. TypeScript knows `state.message` exists here.
+The `loading` and `success` branches each have an invisible `<span>` with `className="sr-only"` — Tailwind's screen-reader-only class that hides content visually but keeps it accessible to assistive technology. When the skeleton appears, a screen reader announces "Loading images…" When images load, it announces "Five images loaded." Without these, a screen reader user would click a mood and hear nothing — they'd have to manually navigate the page to discover whether anything changed.
 
-No boolean flags, no "are we loading?" check alongside "do we have data?". Each branch is exclusive — you're in exactly one state. This pattern is called a "state machine" (though this is a simple one). It prevents the bug where `isLoading` is true AND `error` is true AND the code tries to render both at once.
-
-`py-16` on the idle hint gives it the same vertical space the grid would occupy, so the page's scroll position doesn't change when you click a mood.
+The `error` branch doesn't need an `sr-only` span — the `ErrorState` component's visible text ("Couldn't load images.") is already announced by the screen reader when the region updates.
 
 ---
 
