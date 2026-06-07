@@ -7,15 +7,13 @@ type Props = {
 };
 
 export function MoodButton({ mood, selected, onSelect }: Props) {
-  const base = 'px-5 py-2 rounded-md text-sm font-medium transition-colors';
-
   return (
     <button
-      className={
+      className={`relative z-10 w-14 h-8 text-xs font-medium transition-colors duration-200 motion-reduce:transition-none ${
         selected
-          ? `${base} bg-primary text-on-primary`
-          : `${base} border border-outline text-on-background hover:bg-surface-container`
-      }
+          ? 'text-surface'
+          : 'text-on-surface/70 hover:text-on-surface'
+      }`}
       onClick={() => onSelect(mood)}
     >
       {mood}

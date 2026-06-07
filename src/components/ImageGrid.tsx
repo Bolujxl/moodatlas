@@ -1,53 +1,58 @@
+import { useState } from 'react';
 import type { ImageResult } from '../types';
 import { ImageCard } from './ImageCard';
-import { STAGGER_OFFSETS_TOP, STAGGER_OFFSETS_BOTTOM } from '../lib/layout';
 
 type Props = {
   images: ImageResult[];
 };
 
+const TILE_DELAYS = [0, 80, 120, 60, 180];
+
 export function ImageGrid({ images }: Props) {
+  const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
+  const someoneIsHovered = hoveredCardId !== null;
+
   if (images.length < 5) {
     return (
-      <p className="text-center text-on-surface-variant py-16">
+      <p className="flex items-center justify-center h-full text-on-surface-variant">
         Not enough images found for this mood. Try another.
       </p>
     );
   }
 
+  const renderCard = (image: ImageResult, position: string, delay: number) => (
+    <div
+      key={image.id}
+      className={`${position}`}
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      <ImageCard
+        image={image}
+        isHovered={hoveredCardId === image.id}
+        someoneIsHovered={someoneIsHovered}
+        onHoverChange={(hovering) =>
+          setHoveredCardId(hovering ? image.id : null)
+        }
+        gridPosition=""
+      />
+    </div>
+  );
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-6 gap-4 max-w-5xl mx-auto">
-      <div
-        className="lg:col-span-2 lg:mt-[var(--stagger)]"
-        style={{ '--stagger': `${STAGGER_OFFSETS_TOP[0]}px` } as React.CSSProperties}
-      >
-        <ImageCard image={images[0]} />
-      </div>
-      <div
-        className="lg:col-span-2 lg:mt-[var(--stagger)]"
-        style={{ '--stagger': `${STAGGER_OFFSETS_TOP[1]}px` } as React.CSSProperties}
-      >
-        <ImageCard image={images[1]} />
-      </div>
-      <div
-        className="lg:col-span-2 lg:mt-[var(--stagger)]"
-        style={{ '--stagger': `${STAGGER_OFFSETS_TOP[2]}px` } as React.CSSProperties}
-      >
-        <ImageCard image={images[2]} />
+    <>
+      {/* Mobile — vertical stack */}
+      <div className="flex flex-col gap-2 px-4 pt-6 pb-28 md:hidden">
+        {images.map((image, i) => renderCard(image, '', i))}
       </div>
 
-      <div
-        className="lg:col-span-2 lg:col-start-2 lg:mt-[var(--stagger)]"
-        style={{ '--stagger': `${STAGGER_OFFSETS_BOTTOM[0]}px` } as React.CSSProperties}
-      >
-        <ImageCard image={images[3]} />
+      {/* Desktop — bento grid */}
+      <div className="hidden md:grid grid-cols-3 grid-rows-3 gap-3 max-w-5xl mx-auto h-[70vh] px-8 w-full">
+        {renderCard(images[0], 'col-span-1 row-span-2 overflow-hidden rounded animate-tile', TILE_DELAYS[0])}
+        {renderCard(images[1], 'col-span-1 row-span-1 overflow-hidden rounded animate-tile', TILE_DELAYS[1])}
+        {renderCard(images[2], 'col-span-1 row-span-1 overflow-hidden rounded animate-tile', TILE_DELAYS[2])}
+        {renderCard(images[3], 'col-span-2 row-span-2 col-start-2 row-start-2 overflow-hidden rounded animate-tile', TILE_DELAYS[3])}
+        {renderCard(images[4], 'col-span-1 row-span-1 overflow-hidden rounded animate-tile', TILE_DELAYS[4])}
       </div>
-      <div
-        className="lg:col-span-2 lg:mt-[var(--stagger)]"
-        style={{ '--stagger': `${STAGGER_OFFSETS_BOTTOM[1]}px` } as React.CSSProperties}
-      >
-        <ImageCard image={images[4]} />
-      </div>
-    </div>
+    </>
   );
 }

@@ -1,7 +1,7 @@
 import type { Mood, ImageResult } from '../types';
 import { MOOD_QUERIES } from './moodQueries';
 
-const UNSPLASH_URL = 'https://api.unsplash.com/search/photos';
+const UNSPLASH_URL = 'https://api.unsplash.com/photos/random';
 const ACCESS_KEY = import.meta.env.VITE_UNSPLASH_ACCESS_KEY;
 
 export async function fetchMoodImages(
@@ -13,7 +13,7 @@ export async function fetchMoodImages(
   }
 
   const query = MOOD_QUERIES[mood];
-  const url = `${UNSPLASH_URL}?query=${encodeURIComponent(query)}&per_page=5&orientation=landscape`;
+  const url = `${UNSPLASH_URL}?query=${encodeURIComponent(query)}&count=5&orientation=landscape`;
 
   const response = await fetch(url, {
     headers: { Authorization: `Client-ID ${ACCESS_KEY}` },
@@ -28,7 +28,7 @@ export async function fetchMoodImages(
   }
 
   const data = await response.json();
-  return data.results.map((r: any) => ({
+  return data.map((r: any) => ({
     id: r.id,
     url: r.urls.regular,
     alt: r.alt_description || r.description || `${mood} mood image`,

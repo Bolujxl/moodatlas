@@ -1,30 +1,24 @@
 import { useState, useRef, useCallback } from 'react';
-import type { Mood, ImageResult, FetchState } from '../types';
+import type { Mood, FetchState } from '../types';
 import { fetchMoodImages } from '../lib/api';
-
-type Cache = Partial<Record<Mood, ImageResult[]>>;
 
 export function useMoodFetch() {
   const [currentMood, setCurrentMood] = useState<Mood | null>(null);
   const [state, setState] = useState<FetchState>({ status: 'idle' });
-  const cacheRef = useRef<Cache>({});
   const abortRef = useRef<AbortController | null>(null);
 
   const selectMood = useCallback((mood: Mood) => {
-    if (mood === currentMood && state.status !== 'error') return;
+    // Spam guard — block only if already loading the same mood
+    if (mood === currentMood && state.status === 'loading') return;
 
     setCurrentMood(mood);
 
-    const cached = cacheRef.current[mood];
-    if (cached) {
-      setState({ status: 'success', images: cached });
-      return;
-    }
-
+    // Cancel any in-flight request
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
 
+    // 10-second timeout — abort if request takes too long
     const timedOut = { current: false };
     const timeoutId = setTimeout(() => {
       timedOut.current = true;
@@ -37,7 +31,6 @@ export function useMoodFetch() {
       .then((images) => {
         clearTimeout(timeoutId);
         if (controller.signal.aborted) return;
-        cacheRef.current[mood] = images;
         setState({ status: 'success', images });
       })
       .catch((err) => {
@@ -53,10 +46,7 @@ export function useMoodFetch() {
   }, [currentMood, state.status]);
 
   const retry = useCallback(() => {
-    if (currentMood) {
-      delete cacheRef.current[currentMood];
-      selectMood(currentMood);
-    }
+    if (currentMood) selectMood(currentMood);
   }, [currentMood, selectMood]);
 
   return { currentMood, state, selectMood, retry };
